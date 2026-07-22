@@ -1,1 +1,955 @@
-my code for the application 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZedGrade — Zambian Grade Tracker</title>
+<script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  button { touch-action: manipulation; }
+  #root { min-height: 100vh; }
+  #zg-fallback { font-family: sans-serif; max-width: 520px; margin: 60px auto; padding: 24px; line-height:1.6; color:#211D18; }
+</style>
+</head>
+<body>
+<div id="root"><div id="zg-fallback">Loading ZedGrade&hellip; if this message does not disappear within a few seconds, check your internet connection (this page loads React from a CDN the first time) and open the browser console for details.</div></div>
+
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('root');
+  if (el) {
+    el.innerHTML = '<div id="zg-fallback"><strong>Something went wrong loading ZedGrade.</strong><br/>Error: ' +
+      (e.message || 'unknown error') + '<br/><br/>Try refreshing the page, or check that you are connected to the internet (this page loads React from a CDN).</div>';
+  }
+});
+</script>
+
+<script>
+"use strict";
+const { useState, useEffect, useMemo, useCallback } = React;
+/* ------------------------------------------------------------------ */
+/*  DESIGN TOKENS                                                      */
+/* ------------------------------------------------------------------ */
+const C = {
+    forest: "#173B2C", forestDeep: "#0F2A20", copper: "#BD6423", copperLight: "#E08A3E",
+    gold: "#D4A017", flagRed: "#B5262C", ink: "#211D18", sand: "#F4EEE0",
+    sandDeep: "#E9DFC7", cream: "#FBF8F0", line: "#DCD1B4", slate: "#5B6660",
+};
+const GLOBAL_CSS = `
+  * , *::before, *::after { box-sizing: border-box; }
+  button { touch-action: manipulation; }
+`;
+/* ------------------------------------------------------------------ */
+/*  ICONS (hand-drawn, no external icon library needed)                */
+/* ------------------------------------------------------------------ */
+function Icon({ name, size = 16, color = "currentColor", style }) {
+    const s = { width: size, height: size, display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style };
+    const common = { viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
+    switch (name) {
+        case "plus": return React.createElement("svg", { style: s, ...common },
+            React.createElement("line", { x1: "12", y1: "5", x2: "12", y2: "19" }),
+            React.createElement("line", { x1: "5", y1: "12", x2: "19", y2: "12" }));
+        case "trash": return React.createElement("svg", { style: s, ...common },
+            React.createElement("polyline", { points: "3 6 5 6 21 6" }),
+            React.createElement("path", { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" }),
+            React.createElement("path", { d: "M10 11v6" }),
+            React.createElement("path", { d: "M14 11v6" }),
+            React.createElement("path", { d: "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" }));
+        case "save": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" }),
+            React.createElement("polyline", { points: "17 21 17 13 7 13 7 21" }),
+            React.createElement("polyline", { points: "7 3 7 8 15 8" }));
+        case "printer": return React.createElement("svg", { style: s, ...common },
+            React.createElement("polyline", { points: "6 9 6 2 18 2 18 9" }),
+            React.createElement("path", { d: "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" }),
+            React.createElement("rect", { x: "6", y: "14", width: "12", height: "8" }));
+        case "share": return React.createElement("svg", { style: s, ...common },
+            React.createElement("circle", { cx: "18", cy: "5", r: "3" }),
+            React.createElement("circle", { cx: "6", cy: "12", r: "3" }),
+            React.createElement("circle", { cx: "18", cy: "19", r: "3" }),
+            React.createElement("line", { x1: "8.6", y1: "13.5", x2: "15.4", y2: "17.5" }),
+            React.createElement("line", { x1: "15.4", y1: "6.5", x2: "8.6", y2: "10.5" }));
+        case "logout": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" }),
+            React.createElement("polyline", { points: "16 17 21 12 16 7" }),
+            React.createElement("line", { x1: "21", y1: "12", x2: "9", y2: "12" }));
+        case "users": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" }),
+            React.createElement("circle", { cx: "9", cy: "7", r: "4" }),
+            React.createElement("path", { d: "M23 21v-2a4 4 0 0 0-3-3.87" }),
+            React.createElement("path", { d: "M16 3.13a4 4 0 0 1 0 7.75" }));
+        case "book": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20" }),
+            React.createElement("path", { d: "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" }));
+        case "chart": return React.createElement("svg", { style: s, ...common },
+            React.createElement("line", { x1: "12", y1: "20", x2: "12", y2: "10" }),
+            React.createElement("line", { x1: "18", y1: "20", x2: "18", y2: "4" }),
+            React.createElement("line", { x1: "6", y1: "20", x2: "6", y2: "16" }));
+        case "search": return React.createElement("svg", { style: s, ...common },
+            React.createElement("circle", { cx: "11", cy: "11", r: "8" }),
+            React.createElement("line", { x1: "21", y1: "21", x2: "16.65", y2: "16.65" }));
+        case "x": return React.createElement("svg", { style: s, ...common },
+            React.createElement("line", { x1: "18", y1: "6", x2: "6", y2: "18" }),
+            React.createElement("line", { x1: "6", y1: "6", x2: "18", y2: "18" }));
+        case "award": return React.createElement("svg", { style: s, ...common },
+            React.createElement("circle", { cx: "12", cy: "8", r: "6" }),
+            React.createElement("path", { d: "M8.21 13.89 7 22l5-3 5 3-1.21-8.11" }));
+        case "arrowleft": return React.createElement("svg", { style: s, ...common },
+            React.createElement("line", { x1: "19", y1: "12", x2: "5", y2: "12" }),
+            React.createElement("polyline", { points: "12 19 5 12 12 5" }));
+        case "edit": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }),
+            React.createElement("path", { d: "M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" }));
+        case "download": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }),
+            React.createElement("polyline", { points: "7 10 12 15 17 10" }),
+            React.createElement("line", { x1: "12", y1: "15", x2: "12", y2: "3" }));
+        case "copy": return React.createElement("svg", { style: s, ...common },
+            React.createElement("rect", { x: "9", y: "9", width: "13", height: "13", rx: "2" }),
+            React.createElement("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }));
+        case "mail": return React.createElement("svg", { style: s, ...common },
+            React.createElement("rect", { x: "2", y: "4", width: "20", height: "16", rx: "2" }),
+            React.createElement("path", { d: "m22 6-10 7L2 6" }));
+        case "whatsapp": return React.createElement("svg", { style: s, viewBox: "0 0 24 24", fill: color },
+            React.createElement("path", { d: "M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.4A10 10 0 1 0 12 2zm5.6 14.3c-.2.6-1.3 1.2-1.9 1.3-.5.1-1.1.1-1.8-.1-.4-.1-1-.3-1.6-.6-2.9-1.3-4.8-4.2-4.9-4.4-.1-.2-1.2-1.6-1.2-3s.7-2.1 1-2.4c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5.2.6.8 2 .9 2.1.1.2.1.4 0 .6-.1.2-.1.3-.3.5-.1.2-.3.4-.4.5-.2.2-.3.4-.1.7.2.3.9 1.4 1.9 2.3 1.3 1.1 2.4 1.5 2.7 1.6.3.1.5.1.7-.1.2-.2.8-.9 1-1.2.2-.3.4-.2.7-.1.3.1 1.7.8 2 1 .3.1.5.2.6.3.1.2.1.9-.1 1.5z" }));
+        case "sparkles": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "m12 3-1.9 4.9L5 10l4.9 1.9L12 17l1.9-4.9L19 10l-4.9-1.9Z" }),
+            React.createElement("path", { d: "M5 3v4" }),
+            React.createElement("path", { d: "M19 17v4" }),
+            React.createElement("path", { d: "M3 5h4" }),
+            React.createElement("path", { d: "M17 19h4" }));
+        case "grid": return React.createElement("svg", { style: s, ...common },
+            React.createElement("rect", { x: "3", y: "3", width: "7", height: "7" }),
+            React.createElement("rect", { x: "14", y: "3", width: "7", height: "7" }),
+            React.createElement("rect", { x: "14", y: "14", width: "7", height: "7" }),
+            React.createElement("rect", { x: "3", y: "14", width: "7", height: "7" }));
+        case "check": return React.createElement("svg", { style: s, ...common },
+            React.createElement("polyline", { points: "20 6 9 17 4 12" }));
+        case "alert": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "m21.7 18.4-8.5-14.7a1.5 1.5 0 0 0-2.6 0L2.1 18.4a1.5 1.5 0 0 0 1.3 2.2h17a1.5 1.5 0 0 0 1.3-2.2Z" }),
+            React.createElement("line", { x1: "12", y1: "9", x2: "12", y2: "13" }),
+            React.createElement("line", { x1: "12", y1: "17", x2: "12.01", y2: "17" }));
+        case "cap": return React.createElement("svg", { style: s, ...common },
+            React.createElement("path", { d: "M22 10 12 5 2 10l10 5 10-5Z" }),
+            React.createElement("path", { d: "M6 12.5V17c0 1 2.5 3 6 3s6-2 6-3v-4.5" }));
+        default: return null;
+    }
+}
+/* ------------------------------------------------------------------ */
+/*  SIMPLE SVG CHARTS (no external chart library needed)               */
+/* ------------------------------------------------------------------ */
+function SimpleBarChart({ data, xKey, yKey, max, colorFn, height = 220, suffix = "" }) {
+    const m = max || Math.max(1, ...data.map((d) => d[yKey] || 0));
+    return (React.createElement("div", { style: { height, display: "flex", alignItems: "flex-end", gap: 8, padding: "10px 6px 0", overflowX: "auto" } }, data.map((d, i) => {
+        const h = m ? Math.max(2, (d[yKey] / m) * 100) : 0;
+        const color = colorFn ? colorFn(d, i) : C.copper;
+        return (React.createElement("div", { key: i, style: { flex: "1 0 40px", minWidth: 40, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" } },
+            React.createElement("div", { style: { fontSize: 10.5, fontFamily: "IBM Plex Mono, monospace", color: C.slate, marginBottom: 3 } },
+                d[yKey],
+                suffix),
+            React.createElement("div", { style: { width: "100%", maxWidth: 34, height: `${h}%`, background: color, borderRadius: "6px 6px 0 0", transition: "height .3s" }, title: `${d[xKey]}: ${d[yKey]}${suffix}` }),
+            React.createElement("div", { style: { fontSize: 10.5, color: C.slate, marginTop: 5, textAlign: "center", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, d[xKey])));
+    })));
+}
+function SimplePieChart({ data, size = 170 }) {
+    const total = data.reduce((a, d) => a + d.value, 0) || 1;
+    let cumulative = 0;
+    const r = 68, circumference = 2 * Math.PI * r;
+    return (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", justifyContent: "center" } },
+        React.createElement("svg", { width: size, height: size, viewBox: "0 0 170 170" },
+            React.createElement("g", { transform: "rotate(-90 85 85)" }, data.map((d, i) => {
+                const frac = d.value / total;
+                const dash = frac * circumference;
+                const gap = circumference - dash;
+                const strokeDashoffset = -cumulative * circumference;
+                cumulative += frac;
+                return React.createElement("circle", { key: i, cx: "85", cy: "85", r: r, fill: "none", stroke: d.color, strokeWidth: "26", strokeDasharray: `${dash} ${gap}`, strokeDashoffset: strokeDashoffset });
+            }))),
+        React.createElement("div", null, data.map((d, i) => (React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6, fontSize: 13, fontFamily: "Inter, sans-serif" } },
+            React.createElement("span", { style: { width: 12, height: 12, borderRadius: 3, background: d.color, display: "inline-block" } }),
+            React.createElement("span", null,
+                d.name,
+                ": ",
+                React.createElement("strong", null, d.value))))))));
+}
+/* ------------------------------------------------------------------ */
+/*  GRADING LOGIC (Zambian ECZ-style 9-point scale)                    */
+/* ------------------------------------------------------------------ */
+const GRADE_BANDS = [
+    { min: 90, max: 100, point: 1, label: "Distinction" },
+    { min: 80, max: 89, point: 2, label: "Distinction" },
+    { min: 70, max: 79, point: 3, label: "Merit" },
+    { min: 60, max: 69, point: 4, label: "Merit" },
+    { min: 50, max: 59, point: 5, label: "Credit" },
+    { min: 40, max: 49, point: 6, label: "Credit" },
+    { min: 30, max: 39, point: 7, label: "Satisfactory" },
+    { min: 20, max: 29, point: 8, label: "Satisfactory" },
+    { min: 0, max: 19, point: 9, label: "Unsatisfactory" },
+];
+const PASS_MARK = 40;
+function getGrade(score) {
+    if (score === null || score === undefined || score === "" || isNaN(score))
+        return null;
+    const s = Math.max(0, Math.min(100, Number(score)));
+    return GRADE_BANDS.find((b) => s >= b.min && s <= b.max) || null;
+}
+function gradeColor(point) {
+    if (point == null)
+        return C.slate;
+    if (point <= 2)
+        return "#1B6B3C";
+    if (point <= 4)
+        return "#3E8E52";
+    if (point <= 6)
+        return C.gold;
+    if (point <= 8)
+        return C.copper;
+    return C.flagRed;
+}
+function getDivision(aggregate) {
+    if (aggregate <= 16)
+        return { div: "I", label: "Division I", color: "#1B6B3C" };
+    if (aggregate <= 22)
+        return { div: "II", label: "Division II", color: "#3E8E52" };
+    if (aggregate <= 29)
+        return { div: "III", label: "Division III", color: C.gold };
+    if (aggregate <= 34)
+        return { div: "IV", label: "Division IV", color: C.copper };
+    return { div: "F", label: "Fail", color: C.flagRed };
+}
+function autoRemark(avg) {
+    if (avg == null)
+        return "";
+    if (avg >= 80)
+        return "Excellent performance. Keep up the outstanding work!";
+    if (avg >= 70)
+        return "Very good performance this term.";
+    if (avg >= 60)
+        return "Good performance. Consistent effort shown.";
+    if (avg >= 50)
+        return "Satisfactory performance. There is room to improve.";
+    if (avg >= 40)
+        return "Fair performance. More effort is needed.";
+    return "Below average. Needs serious improvement and extra support.";
+}
+function computeStudent(student, subjects) {
+    const points = [];
+    let sum = 0, count = 0;
+    subjects.forEach((sub) => {
+        const raw = student.scores ? student.scores[sub] : null;
+        if (raw !== null && raw !== undefined && raw !== "") {
+            const n = Number(raw);
+            const g = getGrade(n);
+            if (g) {
+                points.push(g.point);
+                sum += n;
+                count++;
+            }
+        }
+    });
+    const avg = count ? sum / count : null;
+    let division = null;
+    if (subjects.length >= 6 && points.length >= 6) {
+        const best6 = [...points].sort((a, b) => a - b).slice(0, 6);
+        const aggregate = best6.reduce((a, b) => a + b, 0);
+        division = { aggregate, ...getDivision(aggregate) };
+    }
+    return { avg, count, division, filled: count === subjects.length && subjects.length > 0 };
+}
+function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+function hashPass(pw) {
+    let h = 5381;
+    for (let i = 0; i < pw.length; i++)
+        h = ((h * 33) ^ pw.charCodeAt(i)) >>> 0;
+    return h.toString(16);
+}
+/* ------------------------------------------------------------------ */
+/*  STORAGE HELPERS — plain browser localStorage                        */
+/* ------------------------------------------------------------------ */
+function loadUsers() {
+    try {
+        const r = localStorage.getItem("zg:users");
+        return r ? JSON.parse(r) : [];
+    }
+    catch (_a) {
+        return [];
+    }
+}
+function saveUsers(list) {
+    try {
+        localStorage.setItem("zg:users", JSON.stringify(list));
+    }
+    catch (_a) { }
+}
+function loadSheets(username) {
+    try {
+        const r = localStorage.getItem(`zg:sheets:${username}`);
+        return r ? JSON.parse(r) : [];
+    }
+    catch (_a) {
+        return [];
+    }
+}
+function saveSheets(username, sheets) {
+    try {
+        localStorage.setItem(`zg:sheets:${username}`, JSON.stringify(sheets));
+    }
+    catch (_a) { }
+}
+/* ------------------------------------------------------------------ */
+/*  SMALL UI PRIMITIVES                                                 */
+/* ------------------------------------------------------------------ */
+function Toast({ toast }) {
+    if (!toast)
+        return null;
+    const bg = toast.type === "error" ? C.flagRed : toast.type === "warn" ? C.copper : C.forest;
+    return (React.createElement("div", { style: {
+            position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)",
+            background: bg, color: C.cream, padding: "10px 18px", borderRadius: 999,
+            fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, zIndex: 200,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", gap: 8,
+        } },
+        React.createElement(Icon, { name: toast.type === "error" ? "alert" : "check", size: 16 }),
+        toast.msg));
+}
+function GradeBadge({ point, size = 30 }) {
+    if (point == null)
+        return (React.createElement("span", { style: {
+                width: size, height: size, borderRadius: "50%", border: `1.5px dashed ${C.line}`,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "IBM Plex Mono, monospace", fontSize: size * 0.4, color: C.slate,
+            } }, "\u2013"));
+    const band = GRADE_BANDS.find((b) => b.point === point);
+    const color = gradeColor(point);
+    return (React.createElement("span", { title: band ? band.label : "", style: {
+            width: size, height: size, borderRadius: "50%", background: `${color}1c`,
+            border: `2px solid ${color}`, color,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, fontSize: size * 0.44,
+        } }, point));
+}
+function Btn({ children, onClick, variant = "primary", icon, style, small, type = "button", disabled }) {
+    const base = {
+        display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "Inter, sans-serif",
+        fontWeight: 600, fontSize: small ? 13 : 14, borderRadius: 10, cursor: disabled ? "not-allowed" : "pointer",
+        padding: small ? "7px 12px" : "10px 16px", border: "1.5px solid transparent", transition: "transform .12s, box-shadow .12s",
+        opacity: disabled ? 0.5 : 1,
+    };
+    const variants = {
+        primary: { background: C.copper, color: C.cream, boxShadow: "0 3px 0 #8f4a15" },
+        dark: { background: C.forest, color: C.cream, boxShadow: "0 3px 0 " + C.forestDeep },
+        ghost: { background: "transparent", color: C.forest, border: `1.5px solid ${C.line}` },
+        danger: { background: "transparent", color: C.flagRed, border: `1.5px solid ${C.flagRed}55` },
+        subtle: { background: C.sandDeep, color: C.ink },
+    };
+    return (React.createElement("button", { type: type, disabled: disabled, onClick: onClick, style: { ...base, ...variants[variant], ...style }, onMouseDown: (e) => { if (!disabled)
+            e.currentTarget.style.transform = "translateY(2px)"; }, onMouseUp: (e) => { e.currentTarget.style.transform = "translateY(0)"; }, onMouseLeave: (e) => { e.currentTarget.style.transform = "translateY(0)"; } },
+        icon && React.createElement(Icon, { name: icon, size: small ? 14 : 16 }),
+        children));
+}
+function Field({ label, children }) {
+    return (React.createElement("label", { style: { display: "block", marginBottom: 14 } },
+        React.createElement("span", { style: { display: "block", fontSize: 12.5, fontWeight: 600, color: C.slate, marginBottom: 5, fontFamily: "Inter, sans-serif", textTransform: "uppercase", letterSpacing: 0.4 } }, label),
+        children));
+}
+const inputStyle = {
+    width: "100%", padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${C.line}`,
+    background: C.cream, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: C.ink, outline: "none", boxSizing: "border-box",
+};
+function Modal({ title, onClose, children, width = 480 }) {
+    return (React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(23,59,44,0.55)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }, onClick: onClose },
+        React.createElement("div", { style: { background: C.cream, borderRadius: 16, width: "100%", maxWidth: width, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }, onClick: (e) => e.stopPropagation() },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: `1.5px solid ${C.line}` } },
+                React.createElement("h3", { style: { margin: 0, fontFamily: "Fraunces, serif", fontSize: 19, color: C.forest, fontWeight: 700 } }, title),
+                React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", color: C.slate } },
+                    React.createElement(Icon, { name: "x", size: 20 }))),
+            React.createElement("div", { style: { padding: 20 } }, children))));
+}
+/* ------------------------------------------------------------------ */
+/*  AUTH SCREEN                                                         */
+/* ------------------------------------------------------------------ */
+function AuthScreen({ onAuth, notify }) {
+    const [mode, setMode] = useState("login");
+    const [form, setForm] = useState({ username: "", password: "", fullName: "", school: "" });
+    const [busy, setBusy] = useState(false);
+    const submit = (e) => {
+        e.preventDefault();
+        setBusy(true);
+        const users = loadUsers();
+        const uname = form.username.trim().toLowerCase();
+        if (!uname || !form.password) {
+            notify("Enter a username and password", "error");
+            setBusy(false);
+            return;
+        }
+        if (mode === "signup") {
+            if (users.some((u) => u.username === uname)) {
+                notify("That username is already taken", "error");
+                setBusy(false);
+                return;
+            }
+            const newUser = { username: uname, passwordHash: hashPass(form.password), fullName: form.fullName || uname, school: form.school || "", createdAt: Date.now() };
+            saveUsers([...users, newUser]);
+            notify(`Welcome, ${newUser.fullName}! Account created.`);
+            onAuth(newUser);
+        }
+        else {
+            const found = users.find((u) => u.username === uname);
+            if (!found || found.passwordHash !== hashPass(form.password)) {
+                notify("Incorrect username or password", "error");
+                setBusy(false);
+                return;
+            }
+            notify(`Welcome back, ${found.fullName}`);
+            onAuth(found);
+        }
+        setBusy(false);
+    };
+    return (React.createElement("div", { style: { minHeight: "100vh", background: `linear-gradient(160deg, ${C.forest}, ${C.forestDeep})`, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "Inter, sans-serif" } },
+        React.createElement("style", null, GLOBAL_CSS),
+        React.createElement("div", { style: { width: "100%", maxWidth: 400 } },
+            React.createElement("div", { style: { textAlign: "center", marginBottom: 26 } },
+                React.createElement("div", { style: { width: 58, height: 58, borderRadius: 16, background: C.copper, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 8px 22px rgba(0,0,0,0.3)" } },
+                    React.createElement(Icon, { name: "cap", size: 30, color: C.cream })),
+                React.createElement("h1", { style: { fontFamily: "Fraunces, serif", color: C.cream, fontSize: 30, margin: 0, fontWeight: 700 } }, "ZedGrade"),
+                React.createElement("p", { style: { color: "#C9D6CC", fontSize: 14, marginTop: 6 } }, "Grade tracking for Zambian schools")),
+            React.createElement("div", { style: { background: C.cream, borderRadius: 18, padding: 26, boxShadow: "0 20px 50px rgba(0,0,0,0.35)" } },
+                React.createElement("div", { style: { display: "flex", background: C.sandDeep, borderRadius: 10, padding: 4, marginBottom: 20 } }, ["login", "signup"].map((m) => (React.createElement("button", { key: m, type: "button", onClick: () => setMode(m), style: {
+                        flex: 1, padding: "9px 0", borderRadius: 7, border: "none", cursor: "pointer",
+                        fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13.5,
+                        background: mode === m ? C.forest : "transparent", color: mode === m ? C.cream : C.slate,
+                    } }, m === "login" ? "Log In" : "Sign Up")))),
+                React.createElement("form", { onSubmit: submit },
+                    mode === "signup" && (React.createElement(React.Fragment, null,
+                        React.createElement(Field, { label: "Full name" },
+                            React.createElement("input", { style: inputStyle, value: form.fullName, onChange: (e) => setForm({ ...form, fullName: e.target.value }), placeholder: "e.g. Mutale Banda" })),
+                        React.createElement(Field, { label: "School (optional)" },
+                            React.createElement("input", { style: inputStyle, value: form.school, onChange: (e) => setForm({ ...form, school: e.target.value }), placeholder: "e.g. Kabulonga Girls Secondary" })))),
+                    React.createElement(Field, { label: "Username" },
+                        React.createElement("input", { style: inputStyle, value: form.username, onChange: (e) => setForm({ ...form, username: e.target.value }), placeholder: "e.g. mbanda", autoCapitalize: "none" })),
+                    React.createElement(Field, { label: "Password" },
+                        React.createElement("input", { style: inputStyle, type: "password", value: form.password, onChange: (e) => setForm({ ...form, password: e.target.value }), placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" })),
+                    React.createElement(Btn, { type: "submit", style: { width: "100%", justifyContent: "center", marginTop: 4 }, disabled: busy }, mode === "login" ? "Log In" : "Create Account")),
+                React.createElement("p", { style: { fontSize: 11.5, color: C.slate, marginTop: 16, textAlign: "center", lineHeight: 1.5 } }, "Demo authentication stored in this browser's local storage \u2014 for classroom use, not bank-grade security. Accounts stay on this device/browser only.")))));
+}
+/* ------------------------------------------------------------------ */
+/*  SIDEBAR                                                             */
+/* ------------------------------------------------------------------ */
+function Sidebar({ user, view, setView, onLogout, onNewSheet, mobileOpen, setMobileOpen }) {
+    const items = [{ key: "dashboard", label: "Dashboard", icon: "grid" }];
+    return (React.createElement(React.Fragment, null,
+        mobileOpen && React.createElement("div", { onClick: () => setMobileOpen(false), style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 39 } }),
+        React.createElement("div", { style: {
+                width: 232, background: C.forest, color: C.cream, minHeight: "100vh", padding: "22px 16px",
+                display: "flex", flexDirection: "column", position: "fixed", left: mobileOpen ? 0 : -260, top: 0, zIndex: 40,
+                transition: "left .2s ease",
+            }, className: "zg-sidebar" },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 26, padding: "0 4px" } },
+                React.createElement("div", { style: { width: 34, height: 34, borderRadius: 9, background: C.copper, display: "flex", alignItems: "center", justifyContent: "center" } },
+                    React.createElement(Icon, { name: "cap", size: 19 })),
+                React.createElement("span", { style: { fontFamily: "Fraunces, serif", fontWeight: 700, fontSize: 19 } }, "ZedGrade")),
+            React.createElement(Btn, { onClick: () => { onNewSheet(); setMobileOpen(false); }, style: { width: "100%", justifyContent: "center", marginBottom: 18 }, icon: "plus" }, "New Sheet"),
+            items.map((it) => (React.createElement("button", { key: it.key, onClick: () => { setView(it.key); setMobileOpen(false); }, style: {
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", borderRadius: 9, border: "none",
+                    background: view === it.key ? "rgba(255,255,255,0.14)" : "transparent", color: C.cream,
+                    cursor: "pointer", fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 14.5, marginBottom: 4, textAlign: "left",
+                } },
+                React.createElement(Icon, { name: it.icon, size: 17 }),
+                " ",
+                it.label))),
+            React.createElement("div", { style: { marginTop: "auto", paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.15)" } },
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 12, padding: "0 4px" } },
+                    React.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: C.ink, fontSize: 13 } }, user.fullName && user.fullName[0] ? user.fullName[0].toUpperCase() : "T"),
+                    React.createElement("div", { style: { overflow: "hidden" } },
+                        React.createElement("div", { style: { fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, user.fullName),
+                        React.createElement("div", { style: { fontSize: 11.5, color: "#B9C7BC", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, user.school || "No school set"))),
+                React.createElement(Btn, { onClick: onLogout, variant: "ghost", style: { width: "100%", justifyContent: "center", color: C.cream, borderColor: "rgba(255,255,255,0.3)" }, icon: "logout", small: true }, "Log Out")))));
+}
+/* ------------------------------------------------------------------ */
+/*  DASHBOARD                                                            */
+/* ------------------------------------------------------------------ */
+function Dashboard({ sheets, openSheet, onNewSheet, deleteSheet }) {
+    const [q, setQ] = useState("");
+    const filtered = sheets.filter((s) => (s.title + s.className + s.term).toLowerCase().includes(q.toLowerCase()));
+    const totalPupils = sheets.reduce((a, s) => a + s.students.length, 0);
+    const allAvgs = [];
+    sheets.forEach((s) => s.students.forEach((st) => { const c = computeStudent(st, s.subjects); if (c.avg != null)
+        allAvgs.push(c.avg); }));
+    const overallAvg = allAvgs.length ? (allAvgs.reduce((a, b) => a + b, 0) / allAvgs.length).toFixed(1) : "–";
+    const passRate = allAvgs.length ? Math.round((allAvgs.filter((a) => a >= PASS_MARK).length / allAvgs.length) * 100) : null;
+    const statCards = [
+        { label: "Sheets", value: sheets.length, icon: "book" },
+        { label: "Pupils Tracked", value: totalPupils, icon: "users" },
+        { label: "Overall Average", value: overallAvg === "–" ? "–" : `${overallAvg}%`, icon: "chart" },
+        { label: "Pass Rate", value: passRate == null ? "–" : `${passRate}%`, icon: "award" },
+    ];
+    return (React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 22 } },
+            React.createElement("div", null,
+                React.createElement("h1", { style: { fontFamily: "Fraunces, serif", fontSize: 28, color: C.forest, margin: 0, fontWeight: 700 } }, "Dashboard"),
+                React.createElement("p", { style: { color: C.slate, margin: "4px 0 0", fontSize: 14.5 } }, "An overview of every grade sheet you're tracking.")),
+            React.createElement(Btn, { icon: "plus", onClick: onNewSheet }, "New Sheet")),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 26 } }, statCards.map((s) => (React.createElement("div", { key: s.label, style: { background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 14, padding: "16px 16px" } },
+            React.createElement(Icon, { name: s.icon, size: 18, color: C.copper }),
+            React.createElement("div", { style: { fontFamily: "Fraunces, serif", fontSize: 25, fontWeight: 700, color: C.forest, marginTop: 8 } }, s.value),
+            React.createElement("div", { style: { fontSize: 12.5, color: C.slate, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 } }, s.label))))),
+        React.createElement("div", { style: { position: "relative", marginBottom: 16, maxWidth: 320 } },
+            React.createElement(Icon, { name: "search", size: 16, style: { position: "absolute", left: 12, top: 12, color: C.slate } }),
+            React.createElement("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "Search sheets\u2026", style: { ...inputStyle, paddingLeft: 36 } })),
+        filtered.length === 0 ? (React.createElement("div", { style: { textAlign: "center", padding: "60px 20px", border: `1.5px dashed ${C.line}`, borderRadius: 16 } },
+            React.createElement(Icon, { name: "book", size: 30, color: C.line }),
+            React.createElement("p", { style: { color: C.slate, marginTop: 10 } }, sheets.length === 0 ? "No grade sheets yet. Create your first one." : "No sheets match your search."),
+            sheets.length === 0 && React.createElement(Btn, { onClick: onNewSheet, icon: "plus", style: { marginTop: 6 } }, "Create a Sheet"))) : (React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 14 } }, filtered.map((s) => {
+            const avgs = s.students.map((st) => computeStudent(st, s.subjects).avg).filter((a) => a != null);
+            const cls = avgs.length ? (avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(1) : "–";
+            return (React.createElement("div", { key: s.id, onClick: () => openSheet(s.id), style: {
+                    background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 14, padding: 16, cursor: "pointer",
+                    position: "relative", transition: "box-shadow .15s",
+                }, onMouseEnter: (e) => e.currentTarget.style.boxShadow = "0 8px 22px rgba(23,59,44,0.12)", onMouseLeave: (e) => e.currentTarget.style.boxShadow = "none" },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+                    React.createElement("h3", { style: { fontFamily: "Fraunces, serif", fontSize: 17.5, color: C.forest, margin: 0, fontWeight: 700, paddingRight: 8 } }, s.title),
+                    React.createElement("button", { onClick: (e) => { e.stopPropagation(); deleteSheet(s.id); }, style: { background: "none", border: "none", color: C.slate, cursor: "pointer", flexShrink: 0 } },
+                        React.createElement(Icon, { name: "trash", size: 15 }))),
+                React.createElement("p", { style: { fontSize: 13, color: C.slate, margin: "4px 0 12px" } },
+                    s.className,
+                    " \u00B7 ",
+                    s.term,
+                    " ",
+                    s.year),
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                    React.createElement("span", { style: { fontSize: 12.5, color: C.slate, display: "inline-flex", alignItems: "center", gap: 4 } },
+                        React.createElement(Icon, { name: "users", size: 12 }),
+                        " ",
+                        s.students.length,
+                        " pupils \u00B7 ",
+                        s.subjects.length,
+                        " subjects"),
+                    React.createElement("span", { style: { fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, color: C.copper } }, cls === "–" ? "–" : `${cls}%`))));
+        })))));
+}
+/* ------------------------------------------------------------------ */
+/*  NEW SHEET MODAL                                                     */
+/* ------------------------------------------------------------------ */
+function NewSheetModal({ onClose, onCreate }) {
+    const [f, setF] = useState({ title: "", className: "", term: "Term 1", year: String(new Date().getFullYear()) });
+    return (React.createElement(Modal, { title: "New Grade Sheet", onClose: onClose },
+        React.createElement(Field, { label: "Sheet title" },
+            React.createElement("input", { style: inputStyle, value: f.title, onChange: (e) => setF({ ...f, title: e.target.value }), placeholder: "e.g. Grade 9B Mid-Term Results" })),
+        React.createElement(Field, { label: "Class" },
+            React.createElement("input", { style: inputStyle, value: f.className, onChange: (e) => setF({ ...f, className: e.target.value }), placeholder: "e.g. Grade 9B" })),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
+            React.createElement(Field, { label: "Term" },
+                React.createElement("select", { style: inputStyle, value: f.term, onChange: (e) => setF({ ...f, term: e.target.value }) },
+                    React.createElement("option", null, "Term 1"),
+                    React.createElement("option", null, "Term 2"),
+                    React.createElement("option", null, "Term 3"))),
+            React.createElement(Field, { label: "Year" },
+                React.createElement("input", { style: inputStyle, value: f.year, onChange: (e) => setF({ ...f, year: e.target.value }) }))),
+        React.createElement(Btn, { style: { width: "100%", justifyContent: "center", marginTop: 6 }, onClick: () => f.title.trim() && onCreate(f) }, "Create Sheet")));
+}
+/* ------------------------------------------------------------------ */
+/*  SHEET EDITOR                                                        */
+/* ------------------------------------------------------------------ */
+const thStyle = { padding: "10px 10px", textAlign: "left", fontWeight: 700, fontSize: 12, color: C.forest, textTransform: "uppercase", letterSpacing: 0.3, borderBottom: `1.5px solid ${C.line}` };
+const tdStyle = { padding: "8px 10px", borderBottom: `1px solid ${C.line}` };
+function SheetEditor({ sheet, update, onBack, setTab, tab }) {
+    const [newSubject, setNewSubject] = useState("");
+    const [newStudent, setNewStudent] = useState("");
+    const addSubject = () => {
+        const name = newSubject.trim();
+        if (!name || sheet.subjects.includes(name))
+            return;
+        update((s) => ({
+            ...s, subjects: [...s.subjects, name],
+            students: s.students.map((st) => ({ ...st, scores: { ...st.scores, [name]: null } })),
+        }));
+        setNewSubject("");
+    };
+    const removeSubject = (name) => {
+        update((s) => ({
+            ...s, subjects: s.subjects.filter((x) => x !== name),
+            students: s.students.map((st) => { const sc = { ...st.scores }; delete sc[name]; return { ...st, scores: sc }; }),
+        }));
+    };
+    const addStudent = () => {
+        const name = newStudent.trim();
+        if (!name)
+            return;
+        update((s) => ({
+            ...s, students: [...s.students, { id: uid(), name, scores: Object.fromEntries(s.subjects.map((sub) => [sub, null])), remark: "" }],
+        }));
+        setNewStudent("");
+    };
+    const removeStudent = (id) => update((s) => ({ ...s, students: s.students.filter((st) => st.id !== id) }));
+    const setScore = (id, subject, val) => {
+        const num = val === "" ? null : Math.max(0, Math.min(100, Number(val)));
+        update((s) => ({ ...s, students: s.students.map((st) => st.id === id ? { ...st, scores: { ...st.scores, [subject]: num } } : st) }));
+    };
+    const setRemark = (id, text) => update((s) => ({ ...s, students: s.students.map((st) => st.id === id ? { ...st, remark: text } : st) }));
+    const autoFillRemarks = () => update((s) => ({
+        ...s, students: s.students.map((st) => ({ ...st, remark: autoRemark(computeStudent(st, s.subjects).avg) })),
+    }));
+    return (React.createElement("div", null,
+        React.createElement("button", { onClick: onBack, style: { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.slate, cursor: "pointer", fontSize: 13.5, fontWeight: 600, marginBottom: 10 } },
+            React.createElement(Icon, { name: "arrowleft", size: 15 }),
+            " All Sheets"),
+        React.createElement("h1", { style: { fontFamily: "Fraunces, serif", fontSize: 26, color: C.forest, margin: "0 0 3px", fontWeight: 700 } }, sheet.title),
+        React.createElement("p", { style: { color: C.slate, margin: "0 0 18px", fontSize: 14 } },
+            sheet.className,
+            " \u00B7 ",
+            sheet.term,
+            " ",
+            sheet.year),
+        React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 18, borderBottom: `1.5px solid ${C.line}` } }, [{ k: "edit", l: "Score Sheet", i: "edit" }, { k: "analysis", l: "Analysis", i: "chart" }].map((t) => (React.createElement("button", { key: t.k, onClick: () => setTab(t.k), style: {
+                display: "flex", alignItems: "center", gap: 6, padding: "9px 4px", marginRight: 18, background: "none", border: "none",
+                borderBottom: tab === t.k ? `2.5px solid ${C.copper}` : "2.5px solid transparent",
+                color: tab === t.k ? C.forest : C.slate, fontWeight: 700, fontSize: 14.5, cursor: "pointer", fontFamily: "Inter, sans-serif",
+            } },
+            React.createElement(Icon, { name: t.i, size: 15 }),
+            t.l)))),
+        tab === "edit" && (React.createElement(React.Fragment, null,
+            React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 } },
+                React.createElement("div", { style: { display: "flex", gap: 6 } },
+                    React.createElement("input", { style: { ...inputStyle, width: 190 }, placeholder: "Add subject e.g. Mathematics", value: newSubject, onChange: (e) => setNewSubject(e.target.value), onKeyDown: (e) => e.key === "Enter" && addSubject() }),
+                    React.createElement(Btn, { small: true, variant: "dark", icon: "plus", onClick: addSubject }, "Subject")),
+                React.createElement("div", { style: { display: "flex", gap: 6 } },
+                    React.createElement("input", { style: { ...inputStyle, width: 190 }, placeholder: "Add pupil name", value: newStudent, onChange: (e) => setNewStudent(e.target.value), onKeyDown: (e) => e.key === "Enter" && addStudent() }),
+                    React.createElement(Btn, { small: true, icon: "plus", onClick: addStudent }, "Pupil")),
+                React.createElement(Btn, { small: true, variant: "ghost", icon: "sparkles", onClick: autoFillRemarks }, "Auto-fill Remarks")),
+            sheet.subjects.length === 0 ? (React.createElement("p", { style: { color: C.slate, fontSize: 14 } }, "Add at least one subject to begin entering scores.")) : sheet.students.length === 0 ? (React.createElement("p", { style: { color: C.slate, fontSize: 14 } }, "Add pupils to start recording their scores.")) : (React.createElement("div", { style: { overflowX: "auto", border: `1.5px solid ${C.line}`, borderRadius: 12 } },
+                React.createElement("table", { style: { borderCollapse: "collapse", width: "100%", fontFamily: "Inter, sans-serif", fontSize: 13.5, minWidth: 560 } },
+                    React.createElement("thead", null,
+                        React.createElement("tr", { style: { background: C.sandDeep } },
+                            React.createElement("th", { style: thStyle }, "Pupil"),
+                            sheet.subjects.map((sub) => (React.createElement("th", { key: sub, style: { ...thStyle, minWidth: 100 } },
+                                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "center" } },
+                                    sub,
+                                    React.createElement("button", { onClick: () => removeSubject(sub), style: { background: "none", border: "none", cursor: "pointer", color: C.slate } },
+                                        React.createElement(Icon, { name: "x", size: 12 })))))),
+                            React.createElement("th", { style: thStyle }, "Avg"),
+                            React.createElement("th", { style: thStyle }, "Remark"),
+                            React.createElement("th", { style: thStyle }))),
+                    React.createElement("tbody", null, sheet.students.map((st, i) => {
+                        const c = computeStudent(st, sheet.subjects);
+                        const g = getGrade(c.avg);
+                        return (React.createElement("tr", { key: st.id, style: { background: i % 2 ? C.cream : "#FEFCF6" } },
+                            React.createElement("td", { style: { ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" } }, st.name),
+                            sheet.subjects.map((sub) => {
+                                var _a;
+                                return (React.createElement("td", { key: sub, style: { ...tdStyle, textAlign: "center" } },
+                                    React.createElement("input", { type: "number", min: 0, max: 100, value: (_a = st.scores[sub]) !== null && _a !== void 0 ? _a : "", onChange: (e) => setScore(st.id, sub, e.target.value), style: { width: 52, padding: "5px 4px", textAlign: "center", border: `1.2px solid ${C.line}`, borderRadius: 6, fontFamily: "IBM Plex Mono, monospace", fontSize: 13 } })));
+                            }),
+                            React.createElement("td", { style: { ...tdStyle, textAlign: "center" } },
+                                React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3 } },
+                                    React.createElement(GradeBadge, { point: g ? g.point : null, size: 26 }),
+                                    React.createElement("span", { style: { fontSize: 11, color: C.slate, fontFamily: "IBM Plex Mono, monospace" } }, c.avg == null ? "–" : c.avg.toFixed(0) + "%"))),
+                            React.createElement("td", { style: { ...tdStyle, minWidth: 170 } },
+                                React.createElement("input", { value: st.remark, onChange: (e) => setRemark(st.id, e.target.value), placeholder: "Remark\u2026", style: { width: "100%", padding: "5px 6px", border: `1.2px solid ${C.line}`, borderRadius: 6, fontSize: 12.5, fontFamily: "Inter, sans-serif", boxSizing: "border-box" } })),
+                            React.createElement("td", { style: tdStyle },
+                                React.createElement("button", { onClick: () => removeStudent(st.id), style: { background: "none", border: "none", cursor: "pointer", color: C.slate } },
+                                    React.createElement(Icon, { name: "trash", size: 14 })))));
+                    }))))))),
+        tab === "analysis" && React.createElement(AnalysisReport, { sheet: sheet })));
+}
+/* ------------------------------------------------------------------ */
+/*  ANALYSIS REPORT                                                      */
+/* ------------------------------------------------------------------ */
+function SectionTitle({ children }) {
+    return React.createElement("h4", { style: { fontFamily: "Fraunces, serif", fontSize: 15.5, color: C.forest, fontWeight: 700, margin: "0 0 10px" } }, children);
+}
+function MiniStat({ label, value, sub }) {
+    return (React.createElement("div", { style: { background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" } },
+        React.createElement("div", { style: { fontSize: 11.5, color: C.slate, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3 } }, label),
+        React.createElement("div", { style: { fontFamily: "Fraunces, serif", fontSize: 21, fontWeight: 700, color: C.forest, marginTop: 3 } }, value),
+        sub && React.createElement("div", { style: { fontSize: 11.5, color: C.copper, fontWeight: 600 } }, sub)));
+}
+function RankList({ list, iconName, color }) {
+    if (!list.length)
+        return React.createElement("p", { style: { fontSize: 13, color: C.slate } }, "Not enough data yet.");
+    return (React.createElement("div", { style: { background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 12, overflow: "hidden" } }, list.map((s, i) => (React.createElement("div", { key: s.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderBottom: i < list.length - 1 ? `1px solid ${C.line}` : "none" } },
+        React.createElement(Icon, { name: iconName, size: 14, color: color }),
+        React.createElement("span", { style: { flex: 1, fontSize: 13.5, fontWeight: 600, color: C.ink } }, s.name),
+        React.createElement("span", { style: { fontFamily: "IBM Plex Mono, monospace", fontWeight: 700, fontSize: 13, color } },
+            s.avg.toFixed(1),
+            "%"))))));
+}
+function AnalysisReport({ sheet }) {
+    const stats = useMemo(() => {
+        const perStudent = sheet.students.map((st) => ({ ...st, ...computeStudent(st, sheet.subjects) }));
+        const withAvg = perStudent.filter((s) => s.avg != null);
+        const classAvg = withAvg.length ? withAvg.reduce((a, s) => a + s.avg, 0) / withAvg.length : null;
+        const passCount = withAvg.filter((s) => s.avg >= PASS_MARK).length;
+        const passRate = withAvg.length ? Math.round((passCount / withAvg.length) * 100) : null;
+        const subjectAverages = sheet.subjects.map((sub) => {
+            const scores = sheet.students.map((st) => st.scores[sub]).filter((v) => v !== null && v !== undefined && v !== "");
+            const avg = scores.length ? scores.reduce((a, b) => a + Number(b), 0) / scores.length : null;
+            return { subject: sub, avg: avg != null ? +avg.toFixed(1) : 0, count: scores.length };
+        });
+        const gradeCounts = Array(9).fill(0);
+        sheet.students.forEach((st) => sheet.subjects.forEach((sub) => {
+            const g = getGrade(st.scores[sub]);
+            if (g)
+                gradeCounts[g.point - 1]++;
+        }));
+        const gradeDist = gradeCounts.map((count, i) => ({ point: i + 1, label: GRADE_BANDS[i].label, count }));
+        const ranked = [...withAvg].sort((a, b) => b.avg - a.avg);
+        const top5 = ranked.slice(0, 5);
+        const bottom5 = [...ranked].reverse().slice(0, 5);
+        const divisions = { I: 0, II: 0, III: 0, IV: 0, F: 0 };
+        let divisionEligible = 0;
+        perStudent.forEach((s) => { if (s.division) {
+            divisions[s.division.div]++;
+            divisionEligible++;
+        } });
+        const bestSubject = subjectAverages.length ? [...subjectAverages].sort((a, b) => b.avg - a.avg)[0] : null;
+        const worstSubject = subjectAverages.length ? [...subjectAverages].sort((a, b) => a.avg - b.avg)[0] : null;
+        return { perStudent, classAvg, passRate, subjectAverages, gradeDist, top5, bottom5, divisions, divisionEligible, bestSubject, worstSubject, ranked };
+    }, [sheet]);
+    if (sheet.students.length === 0 || sheet.subjects.length === 0) {
+        return React.createElement("p", { style: { color: C.slate, fontSize: 14 } }, "Add subjects, pupils, and scores in the Score Sheet tab to see the analysis.");
+    }
+    const divColors = { I: "#1B6B3C", II: "#3E8E52", III: C.gold, IV: C.copper, F: C.flagRed };
+    const divData = ["I", "II", "III", "IV", "F"].map((d) => ({ name: `Div ${d}`, value: stats.divisions[d], color: divColors[d] })).filter((d) => d.value > 0);
+    return (React.createElement("div", null,
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 24 } },
+            React.createElement(MiniStat, { label: "Class Average", value: stats.classAvg != null ? `${stats.classAvg.toFixed(1)}%` : "–" }),
+            React.createElement(MiniStat, { label: "Pass Rate", value: stats.passRate != null ? `${stats.passRate}%` : "–" }),
+            React.createElement(MiniStat, { label: "Strongest Subject", value: stats.bestSubject ? stats.bestSubject.subject : "–", sub: stats.bestSubject ? `${stats.bestSubject.avg}%` : "" }),
+            React.createElement(MiniStat, { label: "Weakest Subject", value: stats.worstSubject ? stats.worstSubject.subject : "–", sub: stats.worstSubject ? `${stats.worstSubject.avg}%` : "" })),
+        React.createElement(SectionTitle, null, "Subject Averages"),
+        React.createElement("div", { style: { background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 26 } },
+            React.createElement(SimpleBarChart, { data: stats.subjectAverages, xKey: "subject", yKey: "avg", max: 100, suffix: "%", colorFn: () => C.copper, height: 220 })),
+        React.createElement(SectionTitle, null, "Grade Distribution (all subjects)"),
+        React.createElement("div", { style: { background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 26 } },
+            React.createElement(SimpleBarChart, { data: stats.gradeDist, xKey: "point", yKey: "count", colorFn: (d) => gradeColor(d.point), height: 200 })),
+        stats.divisionEligible > 0 && (React.createElement(React.Fragment, null,
+            React.createElement(SectionTitle, null,
+                "Division Breakdown ",
+                React.createElement("span", { style: { fontWeight: 400, color: C.slate, fontSize: 12 } },
+                    "(best-6 aggregate, ",
+                    stats.divisionEligible,
+                    " of ",
+                    sheet.students.length,
+                    " pupils have \u22656 subjects scored)")),
+            React.createElement("div", { style: { background: C.cream, border: `1.5px solid ${C.line}`, borderRadius: 14, padding: 18, marginBottom: 26, display: "flex", justifyContent: "center" } },
+                React.createElement(SimplePieChart, { data: divData })))),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 10 } },
+            React.createElement("div", null,
+                React.createElement(SectionTitle, null, "Top Performers"),
+                React.createElement(RankList, { list: stats.top5, iconName: "award", color: "#1B6B3C" })),
+            React.createElement("div", null,
+                React.createElement(SectionTitle, null, "Needs Support"),
+                React.createElement(RankList, { list: stats.bottom5, iconName: "alert", color: C.flagRed })))));
+}
+/* ------------------------------------------------------------------ */
+/*  PRINT VIEW                                                          */
+/* ------------------------------------------------------------------ */
+const ptH = { border: "1px solid #999", padding: "4px 6px", background: "#eee", textAlign: "center" };
+const ptD = { border: "1px solid #999", padding: "4px 6px", textAlign: "center" };
+function PrintView({ sheet, user }) {
+    const rows = sheet.students.map((st) => ({ ...st, ...computeStudent(st, sheet.subjects) }))
+        .sort((a, b) => { var _a, _b; return ((_a = b.avg) !== null && _a !== void 0 ? _a : -1) - ((_b = a.avg) !== null && _b !== void 0 ? _b : -1); });
+    return (React.createElement("div", { id: "zg-print-area", style: { display: "none" } },
+        React.createElement("div", { style: { padding: 30, fontFamily: "Inter, sans-serif", color: "#000" } },
+            React.createElement("div", { style: { textAlign: "center", marginBottom: 6 } },
+                React.createElement("div", { style: { fontFamily: "Fraunces, serif", fontWeight: 900, fontSize: 22 } }, user.school || "School Name"),
+                React.createElement("div", { style: { fontSize: 13 } },
+                    "Grade Report \u2014 ",
+                    sheet.title),
+                React.createElement("div", { style: { fontSize: 12 } },
+                    sheet.className,
+                    " \u00B7 ",
+                    sheet.term,
+                    " ",
+                    sheet.year,
+                    " \u00B7 Prepared by ",
+                    user.fullName)),
+            React.createElement("hr", { style: { margin: "12px 0" } }),
+            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 11 } },
+                React.createElement("thead", null,
+                    React.createElement("tr", null,
+                        React.createElement("th", { style: ptH }, "#"),
+                        React.createElement("th", { style: ptH }, "Pupil"),
+                        sheet.subjects.map((s) => React.createElement("th", { style: ptH, key: s }, s)),
+                        React.createElement("th", { style: ptH }, "Avg %"),
+                        React.createElement("th", { style: ptH }, "Grade"),
+                        React.createElement("th", { style: ptH }, "Division"),
+                        React.createElement("th", { style: ptH }, "Remark"))),
+                React.createElement("tbody", null, rows.map((r, i) => {
+                    const g = getGrade(r.avg);
+                    return (React.createElement("tr", { key: r.id },
+                        React.createElement("td", { style: ptD }, i + 1),
+                        React.createElement("td", { style: { ...ptD, textAlign: "left", fontWeight: 600 } }, r.name),
+                        sheet.subjects.map((s) => { var _a; return React.createElement("td", { style: ptD, key: s }, (_a = r.scores[s]) !== null && _a !== void 0 ? _a : "–"); }),
+                        React.createElement("td", { style: ptD }, r.avg != null ? r.avg.toFixed(1) : "–"),
+                        React.createElement("td", { style: ptD }, g ? g.point : "–"),
+                        React.createElement("td", { style: ptD }, r.division ? r.division.label : "–"),
+                        React.createElement("td", { style: { ...ptD, textAlign: "left" } }, r.remark || "–")));
+                }))),
+            React.createElement("div", { style: { marginTop: 30, display: "flex", justifyContent: "space-between", fontSize: 11 } },
+                React.createElement("div", null, "Class Teacher's Signature: _______________________"),
+                React.createElement("div", null, "Date: _______________")))));
+}
+/* ------------------------------------------------------------------ */
+/*  SHARE MODAL                                                         */
+/* ------------------------------------------------------------------ */
+function buildSummary(sheet, user) {
+    const perStudent = sheet.students.map((st) => ({ ...st, ...computeStudent(st, sheet.subjects) }));
+    const withAvg = perStudent.filter((s) => s.avg != null);
+    const classAvg = withAvg.length ? (withAvg.reduce((a, s) => a + s.avg, 0) / withAvg.length).toFixed(1) : "N/A";
+    const passRate = withAvg.length ? Math.round((withAvg.filter((s) => s.avg >= PASS_MARK).length / withAvg.length) * 100) : "N/A";
+    const top = [...withAvg].sort((a, b) => b.avg - a.avg)[0];
+    return `*${sheet.title}*\n${sheet.className} · ${sheet.term} ${sheet.year}\n\nClass Average: ${classAvg}%\nPass Rate: ${passRate}%\nTop Pupil: ${top ? `${top.name} (${top.avg.toFixed(1)}%)` : "N/A"}\nPupils Tracked: ${sheet.students.length}\n\nShared via ZedGrade`;
+}
+function buildCSV(sheet) {
+    const header = ["Pupil", ...sheet.subjects, "Average %", "Grade Point", "Division", "Remark"];
+    const lines = [header.join(",")];
+    sheet.students.forEach((st) => {
+        const c = computeStudent(st, sheet.subjects);
+        const g = getGrade(c.avg);
+        const row = [st.name, ...sheet.subjects.map((s) => { var _a; return (_a = st.scores[s]) !== null && _a !== void 0 ? _a : ""; }), c.avg != null ? c.avg.toFixed(1) : "", g ? g.point : "", c.division ? c.division.label : "", `"${(st.remark || "").replace(/"/g, '""')}"`];
+        lines.push(row.join(","));
+    });
+    return lines.join("\n");
+}
+function ShareModal({ sheet, user, onClose, notify }) {
+    const text = buildSummary(sheet, user);
+    const copy = async () => { try {
+        await navigator.clipboard.writeText(text);
+        notify("Summary copied to clipboard");
+    }
+    catch (_a) {
+        notify("Could not copy — select and copy manually", "error");
+    } };
+    const whatsapp = () => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    const email = () => window.open(`mailto:?subject=${encodeURIComponent(sheet.title + " — Grade Report")}&body=${encodeURIComponent(text)}`, "_blank");
+    const downloadCSV = () => {
+        try {
+            const blob = new Blob([buildCSV(sheet)], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${sheet.title.replace(/\s+/g, "_")}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            notify("CSV downloaded");
+        }
+        catch (_a) {
+            notify("Download failed", "error");
+        }
+    };
+    return (React.createElement(Modal, { title: "Share Grade Report", onClose: onClose },
+        React.createElement("div", { style: { background: C.sandDeep, borderRadius: 10, padding: 12, fontSize: 12.5, fontFamily: "IBM Plex Mono, monospace", whiteSpace: "pre-wrap", marginBottom: 16, color: C.ink } }, text),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            React.createElement(Btn, { onClick: whatsapp, icon: "whatsapp", style: { background: "#25D366", boxShadow: "0 3px 0 #1aa653", justifyContent: "center" } }, "WhatsApp"),
+            React.createElement(Btn, { onClick: email, icon: "mail", variant: "dark", style: { justifyContent: "center" } }, "Email"),
+            React.createElement(Btn, { onClick: copy, icon: "copy", variant: "ghost", style: { justifyContent: "center" } }, "Copy Text"),
+            React.createElement(Btn, { onClick: downloadCSV, icon: "download", variant: "ghost", style: { justifyContent: "center" } }, "Download CSV"))));
+}
+/* ------------------------------------------------------------------ */
+/*  MAIN APP                                                             */
+/* ------------------------------------------------------------------ */
+function App() {
+    const [user, setUser] = useState(null);
+    const [sheets, setSheets] = useState([]);
+    const [view, setView] = useState("dashboard");
+    const [activeSheetId, setActiveSheetId] = useState(null);
+    const [tab, setTab] = useState("edit");
+    const [showNewSheet, setShowNewSheet] = useState(false);
+    const [showShare, setShowShare] = useState(false);
+    const [toast, setToast] = useState(null);
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const notify = useCallback((msg, type = "ok") => {
+        setToast({ msg, type });
+        clearTimeout(window.__zgToastTimer);
+        window.__zgToastTimer = setTimeout(() => setToast(null), 2600);
+    }, []);
+    const handleAuth = (u) => {
+        setUser(u);
+        setSheets(loadSheets(u.username));
+        setView("dashboard");
+    };
+    const handleLogout = () => { setUser(null); setSheets([]); setActiveSheetId(null); setView("dashboard"); };
+    const persist = useCallback((next) => { if (user)
+        saveSheets(user.username, next); }, [user]);
+    const createSheet = (f) => {
+        const sheet = { id: uid(), title: f.title, className: f.className, term: f.term, year: f.year, subjects: [], students: [], createdAt: Date.now(), updatedAt: Date.now() };
+        const next = [sheet, ...sheets];
+        setSheets(next);
+        persist(next);
+        setShowNewSheet(false);
+        setActiveSheetId(sheet.id);
+        setTab("edit");
+        setView("sheet");
+        notify("Sheet created");
+    };
+    const deleteSheet = (id) => {
+        if (!window.confirm("Delete this sheet? This cannot be undone."))
+            return;
+        const next = sheets.filter((s) => s.id !== id);
+        setSheets(next);
+        persist(next);
+        if (activeSheetId === id) {
+            setActiveSheetId(null);
+            setView("dashboard");
+        }
+        notify("Sheet deleted", "warn");
+    };
+    const updateSheet = (id, updater) => {
+        setSheets((prev) => {
+            const next = prev.map((s) => s.id === id ? { ...updater(s), updatedAt: Date.now() } : s);
+            persist(next);
+            return next;
+        });
+    };
+    const saveNow = () => { persist(sheets); notify("Saved"); };
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (!user)
+        return React.createElement(AuthScreen, { onAuth: handleAuth, notify: notify });
+    return (React.createElement("div", { style: { minHeight: "100vh", background: C.sand, fontFamily: "Inter, sans-serif" }, className: "zg-root" },
+        React.createElement("style", null, `
+        ${GLOBAL_CSS}
+        @media (min-width: 900px) {
+          .zg-sidebar { left: 0 !important; }
+          .zg-content { margin-left: 232px; }
+          .zg-menu-btn { display: none !important; }
+        }
+        input:focus, select:focus { outline: 2px solid ${C.copper}55; border-color: ${C.copper} !important; }
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-thumb { background: ${C.line}; border-radius: 6px; }
+        @media print {
+          body * { visibility: hidden; }
+          #zg-print-area, #zg-print-area * { visibility: visible; }
+          #zg-print-area { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+        }
+      `),
+        React.createElement(Sidebar, { user: user, view: view, setView: (v) => { setView(v); setActiveSheetId(null); }, onLogout: handleLogout, onNewSheet: () => setShowNewSheet(true), mobileOpen: mobileOpen, setMobileOpen: setMobileOpen }),
+        React.createElement("div", { className: "zg-content", style: { padding: "18px 20px 60px", maxWidth: 1100, margin: "0 auto" } },
+            React.createElement("div", { className: "zg-menu-btn", style: { marginBottom: 12 } },
+                React.createElement("button", { onClick: () => setMobileOpen(true), style: { background: C.forest, color: C.cream, border: "none", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13 } },
+                    React.createElement(Icon, { name: "users", size: 14 }),
+                    " Menu")),
+            view === "dashboard" && (React.createElement(Dashboard, { sheets: sheets, openSheet: (id) => { setActiveSheetId(id); setTab("edit"); setView("sheet"); }, onNewSheet: () => setShowNewSheet(true), deleteSheet: deleteSheet })),
+            view === "sheet" && activeSheet && (React.createElement(React.Fragment, null,
+                React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginBottom: -6 } },
+                    React.createElement(Btn, { small: true, variant: "ghost", icon: "save", onClick: saveNow }, "Save"),
+                    React.createElement(Btn, { small: true, variant: "ghost", icon: "printer", onClick: () => window.print() }, "Print"),
+                    React.createElement(Btn, { small: true, variant: "dark", icon: "share", onClick: () => setShowShare(true) }, "Share")),
+                React.createElement(SheetEditor, { sheet: activeSheet, update: (fn) => updateSheet(activeSheet.id, fn), onBack: () => { setView("dashboard"); setActiveSheetId(null); }, tab: tab, setTab: setTab }),
+                React.createElement(PrintView, { sheet: activeSheet, user: user })))),
+        showNewSheet && React.createElement(NewSheetModal, { onClose: () => setShowNewSheet(false), onCreate: createSheet }),
+        showShare && activeSheet && React.createElement(ShareModal, { sheet: activeSheet, user: user, onClose: () => setShowShare(false), notify: notify }),
+        React.createElement(Toast, { toast: toast })));
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App, null));
+
+</script>
+</body>
+  </html>
